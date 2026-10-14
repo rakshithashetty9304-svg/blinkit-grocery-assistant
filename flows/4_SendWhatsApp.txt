@@ -1,0 +1,35 @@
+WebAutomation.LaunchEdge.LaunchEdge Url: $'''https://web.whatsapp.com/''' WindowState: WebAutomation.BrowserWindowState.Maximized ClearCache: False ClearCookies: False WaitForPageToLoadTimeout: 60 Timeout: 60 BrowserInstance=> WhatsAppBrowser
+WAIT 10
+WebAutomation.ExecuteJavascript BrowserInstance: WhatsAppBrowser Javascript: $'''function ExecuteScript() {
+  var body = `%SummaryText%`;
+  var phone = "%WhatsAppRecipient%".replace(/[^0-9]/g, "");
+  return "https://web.whatsapp.com/send?phone=" + phone + "&text=" + encodeURIComponent(body);
+}''' Result=> WhatsAppUrl
+WebAutomation.GoToWebPage.GoToWebPage BrowserInstance: WhatsAppBrowser Url: $'''%WhatsAppUrl%''' WaitForPageToLoadTimeout: 60
+WAIT 20
+WebAutomation.ExecuteJavascript BrowserInstance: WhatsAppBrowser Javascript: $'''function ExecuteScript() {
+  var bodyText = document.body ? document.body.innerText : "";
+  if (bodyText.indexOf("Phone number shared via url is invalid") >= 0) { return "INVALID_NUMBER|WhatsApp says the phone number is invalid"; }
+  if (bodyText.indexOf("Scan to log in") >= 0 || bodyText.indexOf("Log into WhatsApp") >= 0 || bodyText.indexOf("Log in to WhatsApp") >= 0) { return "NOT_LOGGED_IN|Open web.whatsapp.com in Edge and scan the QR code first"; }
+  var icon = document.querySelector("[data-icon=send]") || document.querySelector("[data-icon=wds-ic-send-filled]");
+  var btn = document.querySelector("button[aria-label=Send]") || (icon ? icon.closest("button,[role=button]") : null);
+  if (!btn) { return "SEND_BUTTON_NOT_FOUND|Chat did not load in time"; }
+  btn.click();
+  return "SENT";
+}''' Result=> WhatsAppResult
+IF WhatsAppResult <> $'''SENT''' THEN
+    WAIT 15
+    WebAutomation.ExecuteJavascript BrowserInstance: WhatsAppBrowser Javascript: $'''function ExecuteScript() {
+  var icon = document.querySelector("[data-icon=send]") || document.querySelector("[data-icon=wds-ic-send-filled]");
+  var btn = document.querySelector("button[aria-label=Send]") || (icon ? icon.closest("button,[role=button]") : null);
+  if (!btn) { return "SEND_BUTTON_NOT_FOUND|Chat did not load after retry"; }
+  btn.click();
+  return "SENT";
+}''' Result=> WhatsAppResult
+END
+IF WhatsAppResult <> $'''SENT''' THEN
+    SET ErrorMessage TO $'''WhatsApp message not sent: %WhatsAppResult%'''
+    CALL HandleError
+ELSE
+    WAIT 5
+END

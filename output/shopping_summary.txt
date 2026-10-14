@@ -1,0 +1,16 @@
+﻿BLINKIT GROCERY ASSISTANT - SHOPPING SUMMARY
+Run time: 10/14/2026 11:35:19 AM
+Delivery address: Delivery in 8 minutes Home, [address hidden], Bengaluru
+
+Items:
+Milk: Nandini Toned Milk (500 ml) at Rs 24 x 2 | 14 options compared, best value Rs 4.8 per 100 g/ml | quantity check: OK
+Bread: Britannia Breakfast Slice White Bread (450 g) at Rs 60 x 1 | 12 options compared, best value Rs 13.3 per 100 g/ml | quantity check: OK
+Yogurt: Nandini Pouch Curd (500 g) at Rs 28 x 1 | 13 options compared, best value Rs 5.6 per 100 g/ml | quantity check: OK
+
+
+Cart total: Rs 136 | Budget: Rs 250 | Status: WITHIN BUDGET
+
+Issues found during run: 0
+
+
+Order NOT placed. The bot stops at the cart, before checkout and payment.

@@ -1,0 +1,4 @@
+Item,SearchTerm,MustContain,Quantity,MaxUnitPrice
+Milk,toned milk,milk,2,40
+Bread,bread,bread,1,60
+Yogurt,curd,curd;dahi;yogurt,1,60

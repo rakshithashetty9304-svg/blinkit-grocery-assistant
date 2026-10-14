@@ -1,0 +1,32 @@
+DateTime.GetCurrentDateTime.Local DateTimeFormat: DateTime.DateTimeFormat.DateAndTime CurrentDateTime=> RunTime
+File.ReadFromCSVFile.ReadCSV CSVFile: $'''D:\SONY\blinkit-pad-assignment\config\settings.csv''' Encoding: File.CSVEncoding.UTF8 TrimFields: True FirstLineContainsColumnNames: True ColumnsSeparator: File.CSVColumnsSeparator.Comma CSVTable=> SettingsTable
+SET Budget TO $'''%SettingsTable[0]['Value']%'''
+SET AddressKeyword TO $'''%SettingsTable[1]['Value']%'''
+SET EmailRecipient TO $'''%SettingsTable[2]['Value']%'''
+SET WhatsAppRecipient TO $'''%SettingsTable[3]['Value']%'''
+SET OutputFolder TO $'''%SettingsTable[4]['Value']%'''
+File.ReadFromCSVFile.ReadCSV CSVFile: $'''D:\SONY\blinkit-pad-assignment\config\items.csv''' Encoding: File.CSVEncoding.UTF8 TrimFields: True FirstLineContainsColumnNames: True ColumnsSeparator: File.CSVColumnsSeparator.Comma CSVTable=> ItemsTable
+Variables.CreateNewList List=> SummaryLines
+Variables.CreateNewList List=> ErrorLines
+SET ErrorCount TO 0
+SET AddressText TO $'''NOT VERIFIED'''
+SET CartStatus TO $'''NOT CHECKED'''
+SET CartTotal TO $'''0'''
+CALL ShoppingProcess
+SET SummaryText TO $'''BLINKIT GROCERY ASSISTANT - SHOPPING SUMMARY
+Run time: %RunTime%
+Delivery address: %AddressText%
+
+Items:
+%SummaryLines%
+
+Cart total: Rs %CartTotal% | Budget: Rs %Budget% | Status: %CartStatus%
+
+Issues found during run: %ErrorCount%
+%ErrorLines%
+
+Order NOT placed. The bot stops at the cart, before checkout and payment.'''
+File.WriteText File: $'''%OutputFolder%\shopping_summary.txt''' TextToWrite: SummaryText AppendNewLine: False IfFileExists: File.IfFileExists.Overwrite Encoding: File.FileEncoding.UTF8
+CALL SendEmail
+CALL SendWhatsApp
+Display.ShowMessageDialog.ShowMessage Title: $'''Blinkit Grocery Assistant - Done''' Message: SummaryText Icon: Display.Icon.None Buttons: Display.Buttons.OK DefaultButton: Display.DefaultButton.Button1 IsTopMost: True ButtonPressed=> ButtonPressed

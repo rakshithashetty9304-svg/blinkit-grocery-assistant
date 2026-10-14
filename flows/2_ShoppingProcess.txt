@@ -1,0 +1,196 @@
+WebAutomation.LaunchEdge.LaunchEdge Url: $'''https://blinkit.com/''' WindowState: WebAutomation.BrowserWindowState.Maximized ClearCache: False ClearCookies: False WaitForPageToLoadTimeout: 60 Timeout: 60 BrowserInstance=> Browser
+WAIT 5
+WebAutomation.ExecuteJavascript BrowserInstance: Browser Javascript: $'''function ExecuteScript() {
+  var bar = document.querySelector("[class*=LocationBar__Container]");
+  if (!bar) { return "ERROR|Location bar not found on page"; }
+  var text = bar.innerText.split(String.fromCharCode(10)).join(" ");
+  var key = "%AddressKeyword%".toLowerCase();
+  if (text.toLowerCase().indexOf(key) >= 0) { return "MATCH|" + text; }
+  return "NOMATCH|" + text;
+}''' Result=> AddressCheck
+Text.SplitText.SplitWithDelimiter Text: AddressCheck CustomDelimiter: $'''|''' IsRegEx: False Result=> AddressParts
+IF AddressParts[0] = $'''NOMATCH''' THEN
+    WebAutomation.ExecuteJavascript BrowserInstance: Browser Javascript: $'''function ExecuteScript() {
+  var bar = document.querySelector("[class*=LocationBar__Container]");
+  if (!bar) { return "ERROR|Location bar not found on page"; }
+  bar.click();
+  return "OPENED";
+}''' Result=> SetAddressResult
+    WAIT 3
+    WebAutomation.ExecuteJavascript BrowserInstance: Browser Javascript: $'''function ExecuteScript() {
+  var key = "%AddressKeyword%".toLowerCase();
+  var nodes = Array.from(document.querySelectorAll("div")).filter(function (d) {
+    return d.innerText && d.innerText.length < 400 && d.innerText.toLowerCase().indexOf(key) >= 0;
+  });
+  if (nodes.length === 0) { return "NOT_FOUND|No saved address contains the keyword"; }
+  nodes.sort(function (a, b) { return a.innerText.length - b.innerText.length; });
+  nodes[0].click();
+  return "CLICKED|" + nodes[0].innerText.split(String.fromCharCode(10)).join(" ");
+}''' Result=> SetAddressResult
+    WAIT 6
+    WebAutomation.ExecuteJavascript BrowserInstance: Browser Javascript: $'''function ExecuteScript() {
+  var bar = document.querySelector("[class*=LocationBar__Container]");
+  if (!bar) { return "ERROR|Location bar not found on page"; }
+  var text = bar.innerText.split(String.fromCharCode(10)).join(" ");
+  var key = "%AddressKeyword%".toLowerCase();
+  if (text.toLowerCase().indexOf(key) >= 0) { return "MATCH|" + text; }
+  return "NOMATCH|" + text;
+}''' Result=> AddressCheck
+    Text.SplitText.SplitWithDelimiter Text: AddressCheck CustomDelimiter: $'''|''' IsRegEx: False Result=> AddressParts
+END
+IF AddressParts[0] <> $'''MATCH''' THEN
+    SET ErrorMessage TO $'''Delivery address check failed. Expected keyword %AddressKeyword% but Blinkit shows: %AddressCheck%'''
+    CALL HandleError
+    EXIT FUNCTION
+END
+SET AddressText TO $'''%AddressParts[1]%'''
+WebAutomation.ExecuteJavascript BrowserInstance: Browser Javascript: $'''function ExecuteScript() {
+  var c = document.querySelector("[class*=CartButton__Button]");
+  if (!c || c.innerText.indexOf("₹") < 0) { return "ALREADY_EMPTY"; }
+  if (!document.querySelector("[class*=CartProduct__Container]")) { c.click(); }
+  var tries = 0;
+  var timer = setInterval(function () {
+    tries = tries + 1;
+    var cart = document.querySelector("[class*=CartButton__Button]");
+    if (!cart || cart.innerText.indexOf("₹") < 0 || tries > 40) { clearInterval(timer); return; }
+    var minus = document.querySelector("[class*=CartProduct__Container] [class*=AddToCart___StyledDiv-]");
+    if (minus) { minus.click(); return; }
+    var retry = Array.from(document.querySelectorAll("[class*=CartWrapper__CartContainer] div")).filter(function (d) { return d.children.length === 0 && d.textContent.trim() === "Try Again"; })[0];
+    if (retry) { retry.click(); return; }
+    if (!document.querySelector("[class*=CartWrapper__CartContainer]")) { cart.click(); }
+  }, 1000);
+  return "CLEARING";
+}''' Result=> ClearResult
+WAIT 15
+WebAutomation.ExecuteJavascript BrowserInstance: Browser Javascript: $'''function ExecuteScript() {
+  var c = document.querySelector("[class*=CartButton__Button]");
+  if (!c) { return "ERROR|Cart button not found"; }
+  if (c.innerText.indexOf("₹") < 0) { return "EMPTY"; }
+  return "NOT_EMPTY|" + c.innerText.split(String.fromCharCode(10)).join(" ");
+}''' Result=> CartEmptyCheck
+IF CartEmptyCheck <> $'''EMPTY''' THEN
+    LOOP FOREACH CurrentItem IN ItemsTable
+        WebAutomation.GoToWebPage.GoToWebPage BrowserInstance: Browser Url: $'''https://blinkit.com/s/?q=%CurrentItem['SearchTerm']%''' WaitForPageToLoadTimeout: 60
+        WAIT 4
+        WebAutomation.ExecuteJavascript BrowserInstance: Browser Javascript: $'''function ExecuteScript() {
+  var tries = 0;
+  var timer = setInterval(function () {
+    tries = tries + 1;
+    var minus = document.querySelector(".categories-table .icon-minus");
+    if (!minus || tries > 30) { clearInterval(timer); return; }
+    minus.closest("button").click();
+  }, 1200);
+  return "REMOVING";
+}''' Result=> LeftoverResult
+        WAIT 8
+    END
+    WebAutomation.ExecuteJavascript BrowserInstance: Browser Javascript: $'''function ExecuteScript() {
+  var c = document.querySelector("[class*=CartButton__Button]");
+  if (!c) { return "ERROR|Cart button not found"; }
+  if (c.innerText.indexOf("₹") < 0) { return "EMPTY"; }
+  return "NOT_EMPTY|" + c.innerText.split(String.fromCharCode(10)).join(" ");
+}''' Result=> CartEmptyCheck
+END
+IF CartEmptyCheck <> $'''EMPTY''' THEN
+    SET ErrorMessage TO $'''Could not empty the cart before shopping (it may contain items that are not in items.csv - please remove them manually): %CartEmptyCheck%'''
+    CALL HandleError
+    EXIT FUNCTION
+END
+LOOP FOREACH CurrentItem IN ItemsTable
+    WebAutomation.GoToWebPage.GoToWebPage BrowserInstance: Browser Url: $'''https://blinkit.com/s/?q=%CurrentItem['SearchTerm']%''' WaitForPageToLoadTimeout: 60
+    WAIT 4
+    WebAutomation.ExecuteJavascript BrowserInstance: Browser Javascript: $'''function ExecuteScript() {
+  var must = "%CurrentItem['MustContain']%".toLowerCase().split(";");
+  var maxPrice = parseFloat("%CurrentItem['MaxUnitPrice']%");
+  var qty = parseInt("%CurrentItem['Quantity']%", 10);
+  var cards = Array.from(document.querySelectorAll(".categories-table div[role=button][id]"));
+  if (cards.length === 0) { return "ERROR|No search results found on page"; }
+  var matched = [];
+  var tooCostly = 0;
+  cards.forEach(function (c) {
+    var lines = c.innerText.split(String.fromCharCode(10)).map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
+    var p = -1;
+    for (var i = 0; i < lines.length; i++) { if (lines[i].charAt(0) === "₹") { p = i; break; } }
+    if (p < 2) { return; }
+    var name = lines[p - 2];
+    var size = lines[p - 1];
+    var price = parseFloat(lines[p].replace(/[^0-9.]/g, ""));
+    var nameLower = name.toLowerCase();
+    var isMatch = must.some(function (k) { k = k.trim(); return k.length > 0 && nameLower.indexOf(k) >= 0; });
+    if (!isMatch) { return; }
+    var addBtn = Array.from(c.querySelectorAll("div[role=button]")).filter(function (b) { return b.textContent.trim() === "ADD"; })[0];
+    if (!addBtn) { return; }
+    if (price > maxPrice) { tooCostly = tooCostly + 1; return; }
+    var m = size.toLowerCase().match(/([0-9.]+) ?(kg|gm|g|ml|ltr|litre|l)([^a-z]|$)/);
+    var base = null;
+    if (m) { var n = parseFloat(m[1]); var u = m[2]; base = (u === "kg" || u === "ltr" || u === "litre" || u === "l") ? n * 1000 : n; }
+    var per100 = base ? price / base * 100 : null;
+    matched.push({ id: c.id, name: name, size: size, price: price, per100: per100, btn: addBtn });
+  });
+  if (matched.length === 0) { return "NOT_FOUND|No in-stock product matched within max price (" + tooCostly + " matched but cost more)"; }
+  matched.sort(function (a, b) {
+    if (a.per100 !== null && b.per100 !== null) { return a.per100 - b.per100; }
+    if (a.per100 !== null) { return -1; }
+    if (b.per100 !== null) { return 1; }
+    return a.price - b.price;
+  });
+  var best = matched[0];
+  best.btn.click();
+  var tries = 0;
+  var timer = setInterval(function () {
+    tries = tries + 1;
+    var card = document.getElementById(best.id);
+    if (!card || tries > 20) { clearInterval(timer); return; }
+    var lines = card.innerText.split(String.fromCharCode(10)).map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
+    var current = parseInt(lines[lines.length - 1], 10);
+    if (isNaN(current)) { return; }
+    if (current >= qty) { clearInterval(timer); return; }
+    var plus = card.querySelector(".icon-plus");
+    if (plus) { plus.closest("button").click(); }
+  }, 1500);
+  var note = best.per100 !== null ? "Rs " + best.per100.toFixed(1) + " per 100 g/ml" : "lowest price";
+  return "ADDED|" + best.id + "|" + best.name + "|" + best.size + "|" + best.price + "|" + matched.length + " options compared, best value " + note;
+}''' Result=> PickResult
+    Text.SplitText.SplitWithDelimiter Text: PickResult CustomDelimiter: $'''|''' IsRegEx: False Result=> PickParts
+    IF PickParts[0] = $'''ADDED''' THEN
+        SET ProductId TO $'''%PickParts[1]%'''
+        WAIT 8
+        WebAutomation.ExecuteJavascript BrowserInstance: Browser Javascript: $'''function ExecuteScript() {
+  var card = document.getElementById("%ProductId%");
+  if (!card) { return "0|product card not found"; }
+  var lines = card.innerText.split(String.fromCharCode(10)).map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
+  var note = "plus button did not increase quantity";
+  var plus = card.querySelector(".icon-plus");
+  if (plus) {
+    var btn = plus.closest("button");
+    var st = window.getComputedStyle(btn);
+    var st2 = window.getComputedStyle(plus);
+    if (btn.disabled || btn.getAttribute("aria-disabled") === "true" || parseFloat(st.opacity) < 1 || parseFloat(st2.opacity) < 1 || st.cursor === "not-allowed" || st2.color !== "rgb(255, 255, 255)") { note = "Blinkit would not allow more: limited stock or per-order limit (plus button disabled)"; }
+  }
+  return lines[lines.length - 1] + "|" + note;
+}''' Result=> QtyInCart
+        Text.SplitText.SplitWithDelimiter Text: QtyInCart CustomDelimiter: $'''|''' IsRegEx: False Result=> QtyParts
+        IF QtyParts[0] = $'''%CurrentItem['Quantity']%''' THEN
+            SET QtyStatus TO $'''OK'''
+        ELSE
+            SET QtyStatus TO $'''SHORT, wanted %CurrentItem['Quantity']% but cart has %QtyParts[0]% (%QtyParts[1]%)'''
+            SET ErrorMessage TO $'''%CurrentItem['Item']% quantity short: wanted %CurrentItem['Quantity']%, cart has %QtyParts[0]% (%QtyParts[1]%)'''
+            CALL HandleError
+        END
+        Variables.AddItemToList Item: $'''%CurrentItem['Item']%: %PickParts[2]% (%PickParts[3]%) at Rs %PickParts[4]% x %CurrentItem['Quantity']% | %PickParts[5]% | quantity check: %QtyStatus%''' List: SummaryLines
+    ELSE
+        SET ErrorMessage TO $'''%CurrentItem['Item']% not added: %PickResult%'''
+        CALL HandleError
+    END
+END
+WebAutomation.ExecuteJavascript BrowserInstance: Browser Javascript: $'''function ExecuteScript() {
+  var c = document.querySelector("[class*=CartButton__Button]");
+  if (!c || c.innerText.indexOf("₹") < 0) { return "EMPTY|0|%Budget%"; }
+  var total = parseFloat(c.innerText.split("₹")[1].replace(/[^0-9.]/g, ""));
+  var budget = parseFloat("%Budget%");
+  c.click();
+  return (total <= budget ? "WITHIN BUDGET" : "OVER BUDGET") + "|" + total + "|" + budget;
+}''' Result=> CartResult
+Text.SplitText.SplitWithDelimiter Text: CartResult CustomDelimiter: $'''|''' IsRegEx: False Result=> CartParts
+SET CartStatus TO $'''%CartParts[0]%'''
+SET CartTotal TO $'''%CartParts[1]%'''
